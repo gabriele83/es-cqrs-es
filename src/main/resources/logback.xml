@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<configuration scan="false" debug="false">
+    <turboFilter class="ch.qos.logback.classic.turbo.DuplicateMessageFilter"/>
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="ch.qos.logback.core.encoder.LayoutWrappingEncoder">
+            <encoder class="ch.qos.logback.core.encoder.LayoutWrappingEncoder">
+                <layout class="ch.qos.logback.contrib.json.classic.JsonLayout">
+                    <timestampFormat>yyyy-MM-dd'T'HH:mm:ss.SSSX</timestampFormat>
+                    <timestampFormatTimezoneId>Etc/UTC</timestampFormatTimezoneId>
+                    <jsonFormatter class="ch.qos.logback.contrib.jackson.JacksonJsonFormatter"/>
+                    <appendLineSeparator>true</appendLineSeparator>
+                </layout>
+            </encoder>
+        </encoder>
+    </appender>
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <turboFilter class="ch.qos.logback.classic.turbo.DuplicateMessageFilter"/>
+        <File>./logs/application.log</File>x
+        <encoder>
+            <pattern>[%4p] [%d{ISO8601}] | [%t] %X{sourceThread} | %c{1}: %m%n</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>./logs/application.%d{yyyy-MM-dd}</fileNamePattern>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+    </appender>
+
+    <logger name="org.apache" level="WARN"/>
+    <logger name="kafka" level="ERROR"/>
+    <logger name="kafka.network.Processor" level="OFF" /> <!-- To silence expected IOExceptions on consumer shutdown -->
+    <logger name="org.apache.zookeeper.jmx" level="ERROR"/>  <!-- To silence expected JMX errors on ZK shutdown -->
+    <logger name="kafka.server.KafkaApis" level="OFF" /> <!-- To silence expected occasional AdminOperationException on startup -->
+    <logger name="org.apache.kafka.clients.NetworkClient" level="ERROR"/> <!-- Silencing warnings when writing to not yet initialized topic -->
+
+    <logger name="in ch.qos.logback" level="ERROR"/> <!-- To silence expected logback log on startup-->
+    <logger name="ch.qos.logback" level="ERROR"/>
+    <logger name="c.q.l.core" level="ERROR"/>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </root>
+</configuration>
