@@ -1,1 +1,10 @@
 # Created by .ignore support plugin (hsz.mobi)
+### Scala template
+*.class
+*.log
+
+### Scala template
+*.class
+*.log
+
+src/test/

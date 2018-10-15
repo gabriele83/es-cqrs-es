@@ -13,31 +13,31 @@ class BankAccountAdapter extends EventAdapter {
 
   override def fromJournal(event: Any, manifest: String): EventSeq = event match {
     case msg: BankAccountCreatedMessage ⇒
-      println("1")
+      println("OK 1")
       EventSeq.single(BankAccountCreated(msg.id, msg.accountHolder, Instant.ofEpochMilli(msg.instant)))
     case msg: AmountAddedMessage ⇒
-      println("2")
+      println("OK 2")
       EventSeq.single(AmountAdded(msg.id, msg.amount, Instant.ofEpochMilli(msg.instant)))
     case msg: AmountSubtractedMessage ⇒
-      println("3")
+      println("OK 3")
       EventSeq.single(AmountSubtracted(msg.id, msg.amount, Instant.ofEpochMilli(msg.instant)))
     case x ⇒
-      println("4: " + x)
+      println("KO 4: " + x)
       EventSeq.empty
   }
 
   override def toJournal(event: Any): Any = event match {
     case evt: BankAccountCreated ⇒
-      println("A")
+      println("OK A")
       BankAccountCreatedMessage(evt.id, evt.accountHolder, evt.instant.toEpochMilli)
     case evt: AmountAdded ⇒
-      println("B")
+      println("OK B")
       AmountAddedMessage(evt.id, evt.amount, evt.instant.toEpochMilli)
     case evt: AmountSubtracted ⇒
-      println("C")
+      println("OK C")
       AmountSubtractedMessage(evt.id, evt.amount, evt.instant.toEpochMilli)
     case _ ⇒
-      println("D")
+      println("KO D")
       throw new RuntimeException(s"Cannot serialize '${event.getClass.getName}' to protobuf")
   }
 }
