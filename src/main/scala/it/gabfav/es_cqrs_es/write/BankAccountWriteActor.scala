@@ -3,31 +3,32 @@ package it.gabfav.es_cqrs_es.write
 import akka.actor.Props
 import akka.cluster.sharding.ShardRegion
 import akka.event.LoggingReceive
-import akka.persistence.SnapshotOffer
+import akka.persistence.{ RecoveryCompleted, SnapshotOffer }
 import it.gabfav.es_cqrs_es.adapter
 import it.gabfav.es_cqrs_es.domain.BankAccount
 import it.gabfav.es_cqrs_es.domain.BankAccount._
 import it.gabfav.es_cqrs_es.domain.proto.bankAccount.BankAccountMessage
-import it.gabfav.es_cqrs_es.write.BankAccountWriteActor._
+import BankAccountWriteActor._
 
 class BankAccountWriteActor extends RepositoryActor[BankAccount, BankAccountCommand, BankAccountEvent, BankAccountError] {
 
-  override def persistenceId: String = s"$BankAccountTag-${self.path.name}"
+  override def persistenceId: String = s"${Name}_${self.path.name}"
 
   var state: BankAccount = BankAccount()
 
-  override def receiveCommand: Receive = {
-    case cmd: BankAccountCommand ⇒ handleCommand(cmd, state, Set(BankAccountTag))
+  override def receiveCommand: Receive = receiveSnapshotCommand orElse LoggingReceive {
+    case cmd: BankAccountCommand ⇒ handleCommand(cmd, state)
     case unknown                 ⇒ log.error(s"Received unknown message in receiveCommand (sender: ${sender()} - message: $unknown)")
   }
 
   override protected def update(state: BankAccount, event: BankAccountEvent): BankAccount = event.applyTo(state)
 
-  override protected def receiveSnapshotRecover: Receive = LoggingReceive {
+  override def receiveRecover: Receive = LoggingReceive {
     case event: BankAccountEvent ⇒
       state = update(state, event)
     case SnapshotOffer(_, snapshot: BankAccountMessage) ⇒
       state = adapter.BankAccountAdapter.toEntity(snapshot)
+    case RecoveryCompleted ⇒ log.info(s"Recovery completed: $state")
   }
 
   override protected def saveSnapshotF(state: BankAccount): Unit = if (lastSequenceNr % snapShotInterval == 0 && lastSequenceNr != 0) {
@@ -43,8 +44,6 @@ class BankAccountWriteActor extends RepositoryActor[BankAccount, BankAccountComm
 
 object BankAccountWriteActor {
 
-  val BankAccountTag = " BankAccount"
-
   val Name: String = "bank-account-repository"
 
   def props: Props = Props(new BankAccountWriteActor)
@@ -58,5 +57,4 @@ object BankAccountWriteActor {
     case cmd: BankAccountCommand     ⇒ cmd.id
     case ShardRegion.StartEntity(id) ⇒ id
   }
-
 }

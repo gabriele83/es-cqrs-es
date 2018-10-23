@@ -18,15 +18,9 @@ object GlobalConfig {
   /** Service Name */
   val serviceName: String = config.getString("service")
 
-  /** elastic search */
-  // val esUser: String = sys.env("ES_USER")
-  // val esPassword: String = sys.env("ES_PASSWORD")
   /** elastic search configs */
   val elasticCfg: Config = config getConfig "elastic"
 
   val esHost: String = elasticCfg getString "host"
-  val esPort: Int = elasticCfg getInt "port"
-  val esShards: Int = elasticCfg getInt "shards"
-  val esReplicas: Int = elasticCfg getInt "replicas"
-  val esIndexPrefix: String = elasticCfg getString "host"
+  val esIndexPrefix: String = elasticCfg getString "indexPrefix"
 }

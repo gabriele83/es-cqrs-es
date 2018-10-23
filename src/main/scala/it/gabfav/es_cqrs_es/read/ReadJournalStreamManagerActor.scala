@@ -28,7 +28,7 @@ trait ReadJournalStreamManagerActor[T]
     val source = createSource(readJournal, offset)
     // create stream
     source.to(Sink.actorRefWithAck(self, InitMessage, AckMessage, CompleteMessage)).run()
-    log.info(s"Journal reader started on Cassandra journal - ${self.path.name}")
+    log.info(s"Journal reader started on Cassandra journal - ${self.path.name} - offset: $offset")
   }
 
   protected def manageJournalStream: Receive = LoggingReceive {

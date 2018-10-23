@@ -3,7 +3,6 @@ package it.gabfav.es_cqrs_es.write
 import akka.actor.DiagnosticActorLogging
 import akka.event.LoggingReceive
 import akka.persistence._
-import akka.persistence.journal.Tagged
 
 /**
  * General functionality of a repository that has a persistent state.
@@ -59,22 +58,24 @@ trait RepositoryActor[S, C, E, F] extends PersistentActor with DiagnosticActorLo
    * @param command      Command to apply
    * @param currentState Current state to modify
    */
-  protected def handleCommand(command: C, currentState: S, tags: Set[String]): Unit = {
+  protected def handleCommand(command: C, currentState: S): Unit =
     acceptCommand(currentState, command) match {
-      case Right(Some(event)) ⇒ persist(Tagged(event, tags)) { tagged ⇒
-        state = update(currentState, tagged.payload.asInstanceOf[E])
+      case Right(Some(event)) ⇒ persist(event) { evt: E ⇒
+        state = update(currentState, evt)
         saveSnapshotF(state)
         //sender() ! Protocol.ACK
-        println("handleCommand OK --> " + state)
+        println("handleCommand OK    --> " + state)
+
       }
       case Right(None) ⇒
         // sender() ! Protocol.NOP
-        println("handleCommand NOP --> " + state)
+        println("handleCommand NOP   --> " + state)
+
       case Left(error) ⇒
         //  sender() ! convertCommandFailure(error)
         println("handleCommand ERROR --> " + error)
+
     }
-  }
 
   /**
    * Hook to convert the command's error into protocol's error message
@@ -105,18 +106,5 @@ trait RepositoryActor[S, C, E, F] extends PersistentActor with DiagnosticActorLo
       log.warning(s"Failed saving of a snapshot - metadata: $metadata - error: $cause")
     case DeleteSnapshotsFailure(criteria, cause) ⇒
       log.warning(s"Failed saving of a snapshot - criteria: $criteria - error: $cause")
-  }
-
-  /**
-   * The deriving actor must implement this method to handle its class of events for snapshot recovery.
-   */
-  protected def receiveSnapshotRecover: Receive
-
-  /**
-   * Final cases (completed and unknown) managing messages that can be received while restarting.
-   */
-  override def receiveRecover: Receive = receiveSnapshotRecover andThen LoggingReceive {
-    case RecoveryCompleted ⇒ log.info("Recovery completed: " + state)
-    case unknown           ⇒ log.warning(s"Received unknown message in receiveRecover: $unknown")
   }
 }

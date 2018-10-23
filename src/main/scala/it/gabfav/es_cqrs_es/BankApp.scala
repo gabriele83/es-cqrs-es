@@ -34,13 +34,15 @@ object BankApp extends App with ActorSharding {
     ActorSystem(GlobalConfig.serviceName, config)
   }
 
+  implicit val dispatcher = system.dispatcher
+
   implicit val mat: ActorMaterializer = ActorMaterializer()
   implicit val timeout: Timeout = Timeout(20 seconds)
   implicit val logger: LoggingAdapter = Logging(system, getClass)
 
   createClusterShardingActors()
   createClusterSingletonActors()
-  doTest()
+  // doTest()
 
   // This will start the server until the return key is pressed
 
@@ -66,9 +68,9 @@ object BankApp extends App with ActorSharding {
   private def doTest(): Unit = {
 
     system.scheduler.scheduleOnce(10 seconds) {
-      /* val id1 = UUID.randomUUID().toString
-      val id2 = UUID.randomUUID().toString
-      val id3 = UUID.randomUUID().toString
+      val id1 = "id1"
+      val id2 = "id2"
+      val id3 = "id3"
 
       bankAccountRegion ! CreateBankAccount(id1, "Sandro Rossi")
       bankAccountRegion ! AddAmount(id1, 10, 1)
@@ -84,13 +86,11 @@ object BankApp extends App with ActorSharding {
 
       bankAccountRegion ! CreateBankAccount(id3, "Paolo Verdi")
       bankAccountRegion ! AddAmount(id3, 10, 1)
-      bankAccountRegion ! SubtractAmount(id3, 100, 2)*/
+      bankAccountRegion ! AddAmount(id3, 10, 2)
+      bankAccountRegion ! AddAmount(id3, 10, 3)
+      bankAccountRegion ! SubtractAmount(id3, 100, 4)
 
-      bankAccountRegion ! CreateBankAccount("1", "Mario Rossi")
-      bankAccountRegion ! AddAmount("1", 10, 1)
-      bankAccountRegion ! SubtractAmount("1", 1, 2)
-    }(system.dispatcher)
-
+    }
   }
 
 }

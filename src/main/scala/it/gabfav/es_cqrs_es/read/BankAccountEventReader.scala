@@ -4,53 +4,62 @@ import akka.NotUsed
 import akka.actor.Props
 import akka.event.LoggingReceive
 import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
-import akka.persistence.query.{ EventEnvelope, NoOffset, Offset }
+import akka.persistence.query.{ NoOffset, Offset, TimeBasedUUID }
 import akka.stream.scaladsl.Source
+import com.sksamuel.elastic4s.circe._
+import com.sksamuel.elastic4s.http.ElasticDsl._
+import com.sksamuel.elastic4s.http.bulk.BulkResponse
+import com.sksamuel.elastic4s.http.{ ElasticClient, Response }
+import io.circe.generic.auto._
+import it.gabfav.es_cqrs_es.adapter.BankAccountAdapter
+import it.gabfav.es_cqrs_es.domain.BankAccount.BankAccountEvent
 import it.gabfav.es_cqrs_es.read.BankAccountEventReader._
 import it.gabfav.es_cqrs_es.read.Protocol.GroupedEventEnvelope
-import it.gabfav.es_cqrs_es.read.ReadJournalStreamManagerActor.{ AckMessage, RestartStream }
-import it.gabfav.es_cqrs_es.write.BankAccountWriteActor
+import it.gabfav.es_cqrs_es.read.ReadJournalStreamManagerActor.AckMessage
 
-import scala.concurrent.Future
 import scala.concurrent.duration._
+import scala.concurrent.{ ExecutionContext, Future }
+import scala.util.{ Failure, Success }
 
-// TODO ElasticSearch index definition
-// TODO singleton
 class BankAccountEventReader extends ReadJournalStreamManagerActor[GroupedEventEnvelope] {
 
-  //override def preStart(): Unit = context.system.scheduler.scheduleOnce(messagesDelay, self, ReadOffset)(context.dispatcher)
-  override def preStart(): Unit = context.system.scheduler.scheduleOnce(messagesDelay, self, RestartStream)(context.dispatcher)
+  private implicit val executionContext: ExecutionContext = context.dispatcher
+
+  override def preStart(): Unit = context.system.scheduler.scheduleOnce(messagesDelay, self, ReadOffset)(context.dispatcher)
 
   override protected def createSource(readJournal: CassandraReadJournal, offset: Offset): Source[GroupedEventEnvelope, NotUsed] = readJournal
-    .eventsByTag(BankAccountWriteActor.BankAccountTag, offset)
+    .eventsByTag(BankAccountAdapter.BankAccountTag, offset)
     .groupedWithin(groupSize, streamWindow)
     .map(GroupedEventEnvelope(_))
 
-  /*
-    private def manageJournalMessage: Receive = LoggingReceive {
-     case _: EventEnvelope ⇒ sender ! AckMessage // do nothing
-   }
-
-   override def receive: Receive = manageJournalMessage orElse manageJournalStream
-    */
-
-  /*override def receive: Receive = LoggingReceive {
-    case ReadOffset ⇒ getElasticSearchOffset
-    case _ => // TODO ignore ????
-  }
-
-  def connected(esOffset: Offset): Receive = LoggingReceive {
-    ???
-  }*/
-
   private def manageJournalMessage: Receive = LoggingReceive {
-    case eventEnvelope: EventEnvelope ⇒
-      println("READ ---------> " + eventEnvelope.event)
+    case groupedEvents: GroupedEventEnvelope ⇒
+      val offset2event = groupedEvents.seq map (ee ⇒ ee.offset.asInstanceOf[TimeBasedUUID] -> ee.event.asInstanceOf[BankAccountEvent])
+      val maxOffset: TimeBasedUUID = offset2event.maxBy(_._1)._1
+      val events: Seq[BankAccountEvent] = offset2event map (_._2)
+      val res = indexEventsAndOffset(events, maxOffset)
+      // TODO ...
       sender ! AckMessage // do nothing
   }
 
-  override def receive: Receive = manageJournalMessage orElse manageJournalStream
+  override def receive: Receive = {
+    case ReadOffset ⇒
+      readOffset onComplete {
+        case Success(offset) ⇒
+          self ! OffsetReaded(offset)
+        case Failure(_) ⇒
+          self ! OffsetReaded(NoOffset)
+      }
+    case OffsetReaded(offset) ⇒
+      context.become(withOffset(offset))
+    case unknown ⇒
+      log.error(s"Received unknown message in receiveCommand (sender: $sender - message: $unknown)")
+  }
 
+  def withOffset(offset: Offset): Receive = {
+    startStream(offset)
+    manageJournalMessage orElse manageJournalStream
+  }
 }
 
 object BankAccountEventReader {
@@ -66,9 +75,27 @@ object BankAccountEventReader {
   /** internal protocol */
   case object ReadOffset
 
-  def getElasticSearchOffset: Future[Offset] = {
-    //TODO
-    Future.successful(NoOffset)
-  }
-}
+  case class OffsetReaded(offset: Offset)
 
+  private def readOffset(implicit executionContext: ExecutionContext): Future[TimeBasedUUID] = {
+    val client: ElasticClient = ESHelper.elasticClient
+    val fResult = client
+      .execute(ESHelper.getOffsetRequest(ESHelper.bankAccountOffsetId))
+      .map(read ⇒ read.result.to[TimeBasedUUID])
+    fResult.onComplete(_ ⇒ client.close)
+    fResult
+  }
+
+  private def indexEventsAndOffset(
+    events: Seq[BankAccountEvent],
+    offset: TimeBasedUUID
+  )(implicit executionContext: ExecutionContext): Future[Response[BulkResponse]] = {
+    val client: ElasticClient = ESHelper.elasticClient
+    val fResult = client.execute(
+      bulk(ESHelper.indexEventsRequest(events) :+ ESHelper.indexOffsetRequest(ESHelper.bankAccountOffsetId)(offset))
+    )
+    fResult.onComplete(_ ⇒ client.close)
+    fResult
+  }
+
+}

@@ -52,7 +52,7 @@ object BankAccount {
       if (id == bankAccount.id && version == bankAccount.version) {
         result
       } else {
-        Left(BankAccountError(s"Incompatible command error - Product details: $bankAccount, command: $this"))
+        Left(BankAccountError(s"Incompatible command error - Account: $bankAccount, command: $this"))
       }
   }
 
@@ -71,8 +71,11 @@ object BankAccount {
      */
     val version = 0
 
-    def applyTo(productDetails: BankAccount): BankAccountCommandResult =
+    def applyTo(bankAccount: BankAccount): BankAccountCommandResult = if (bankAccount.id == "" && bankAccount.version == 0) {
       Right(Some(BankAccountCreated(id, accountHolder, Instant.now())))
+    } else {
+      Left(BankAccountError(s"Incompatible command error - Account already exists: $bankAccount, command: $this"))
+    }
   }
 
   final case class AmountAdded(id: String, amount: Long, instant: Instant) extends BankAccountEvent {
@@ -108,4 +111,5 @@ object BankAccount {
         }
       }
   }
+
 }

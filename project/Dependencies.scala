@@ -45,7 +45,8 @@ object Dependencies {
 
   private val elastic4sDependencies: Seq[ModuleID] = Seq(
     "com.sksamuel.elastic4s" %% "elastic4s-core" % elastic4sVersion,
-    "com.sksamuel.elastic4s" %% "elastic4s-http" % elastic4sVersion
+    "com.sksamuel.elastic4s" %% "elastic4s-http" % elastic4sVersion,
+    "com.sksamuel.elastic4s" %% "elastic4s-circe" % elastic4sVersion
   )
 
   private val generalDependencies: Seq[ModuleID] = Seq(
