@@ -31,7 +31,7 @@ object BankApp extends App with ActorSharding {
         ConfigFactory.load()
     }
     // Create an Akka system
-    ActorSystem(GlobalConfig.serviceName, config)
+    ActorSystem(Config.serviceName, config)
   }
 
   implicit val dispatcher = system.dispatcher

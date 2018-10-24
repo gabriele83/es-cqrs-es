@@ -6,7 +6,7 @@ import scala.collection.JavaConverters._
 import scala.concurrent.duration.FiniteDuration
 import scala.language.implicitConversions
 
-object GlobalConfig {
+object Config {
 
   implicit def asFiniteDuration(d: java.time.Duration): FiniteDuration =
     scala.concurrent.duration.Duration.fromNanos(d.toNanos)
@@ -23,4 +23,6 @@ object GlobalConfig {
 
   val esHost: String = elasticCfg getString "host"
   val esIndexPrefix: String = elasticCfg getString "indexPrefix"
+  lazy val eShards: Int = elasticCfg getInt "shards"
+  lazy val eReplicas: Int = elasticCfg getInt "replicas"
 }

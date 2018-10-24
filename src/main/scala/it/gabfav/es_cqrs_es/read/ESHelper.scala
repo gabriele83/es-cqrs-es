@@ -4,23 +4,23 @@ import akka.persistence.query.TimeBasedUUID
 import com.sksamuel.elastic4s.circe._
 import com.sksamuel.elastic4s.get.GetRequest
 import com.sksamuel.elastic4s.http.ElasticDsl._
-import com.sksamuel.elastic4s.http.{ ElasticClient, ElasticProperties }
-import com.sksamuel.elastic4s.indexes.IndexRequest
+import com.sksamuel.elastic4s.http.{ElasticClient, ElasticProperties}
+import com.sksamuel.elastic4s.indexes.{CreateIndexRequest, IndexRequest}
 import io.circe.generic.auto._
-import it.gabfav.es_cqrs_es.GlobalConfig._
+import it.gabfav.es_cqrs_es.Config._
 import it.gabfav.es_cqrs_es.domain.BankAccount.BankAccountEvent
-import org.apache.http.auth.{ AuthScope, UsernamePasswordCredentials }
+import org.apache.http.auth.{AuthScope, UsernamePasswordCredentials}
 import org.apache.http.client.config.RequestConfig.Builder
 import org.apache.http.impl.client.BasicCredentialsProvider
 import org.apache.http.impl.nio.client.HttpAsyncClientBuilder
-import org.elasticsearch.client.RestClientBuilder.{ HttpClientConfigCallback, RequestConfigCallback }
+import org.elasticsearch.client.RestClientBuilder.{HttpClientConfigCallback, RequestConfigCallback}
 
 object ESHelper {
 
+  private val configResultWindow: String = "max_result_window"
   private val elasticDefaultType = "default"
-  private val defaultUserPassword = "elastic"
-  private val esUser: String = sys.env.getOrElse("ES_USER", defaultUserPassword)
-  private val esPassword: String = sys.env.getOrElse("ES_PASSWORD", defaultUserPassword)
+  private val esUser: String = sys.env.getOrElse("ES_USER", "elastic")
+  private val esPassword: String = sys.env.getOrElse("ES_PASSWORD", "elastic")
 
   // offset index
   val offsetPrivateIndex: String = s"${esIndexPrefix}_private_offset"
@@ -46,6 +46,11 @@ object ESHelper {
       httpClientBuilder.setDefaultCredentialsProvider(elasticCredentialsProvider)
     }
   })
+
+  def createOffsetIndexRequest: CreateIndexRequest =
+    createIndex(offsetPrivateIndex) shards eShards replicas eReplicas indexSetting(configResultWindow, Int.MaxValue) mappings {
+      mapping(elasticDefaultType) fields keywordField("value")
+    }
 
   def getOffsetRequest(offsetId: String): GetRequest = get(offsetId)
     .from(offsetPrivateIndex / elasticDefaultType)

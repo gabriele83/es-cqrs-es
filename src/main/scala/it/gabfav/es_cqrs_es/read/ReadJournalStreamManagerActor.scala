@@ -18,12 +18,16 @@ trait ReadJournalStreamManagerActor[T]
 
   implicit val mat: ActorMaterializer = ActorMaterializer()
 
-  protected def createSource(readJournal: CassandraReadJournal, offset: Offset): Source[T, NotUsed]
+  protected def createSource(
+    readJournal: CassandraReadJournal,
+    offset:      Offset
+  ): Source[T, NotUsed]
 
   protected def startStream(offset: Offset = NoOffset): Unit = {
     log.info(s"Consumer start stream on Cassandra journal: ${self.path.name}")
     // obtain read journal by plugin id
-    val readJournal: CassandraReadJournal = PersistenceQuery(context.system).readJournalFor[CassandraReadJournal](CassandraReadJournal.Identifier)
+    val readJournal: CassandraReadJournal = PersistenceQuery(context.system)
+      .readJournalFor[CassandraReadJournal](CassandraReadJournal.Identifier)
     // issue query to journal
     val source = createSource(readJournal, offset)
     // create stream

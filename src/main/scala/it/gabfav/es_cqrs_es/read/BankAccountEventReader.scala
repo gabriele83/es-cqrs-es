@@ -9,6 +9,8 @@ import akka.stream.scaladsl.Source
 import com.sksamuel.elastic4s.circe._
 import com.sksamuel.elastic4s.http.ElasticDsl._
 import com.sksamuel.elastic4s.http.bulk.BulkResponse
+import com.sksamuel.elastic4s.http.get.GetResponse
+import com.sksamuel.elastic4s.http.index.CreateIndexResponse
 import com.sksamuel.elastic4s.http.{ ElasticClient, Response }
 import io.circe.generic.auto._
 import it.gabfav.es_cqrs_es.adapter.BankAccountAdapter
@@ -44,11 +46,15 @@ class BankAccountEventReader extends ReadJournalStreamManagerActor[GroupedEventE
 
   override def receive: Receive = {
     case ReadOffset ⇒
-      readOffset onComplete {
+      (for {
+        _ ← initOffsetIndex
+        read ← readOffset
+      } yield read) onComplete {
         case Success(offset) ⇒
           self ! OffsetReaded(offset)
-        case Failure(_) ⇒
+        case Failure(e) ⇒
           self ! OffsetReaded(NoOffset)
+          log.error(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>< " + e)
       }
     case OffsetReaded(offset) ⇒
       context.become(withOffset(offset))
@@ -60,6 +66,7 @@ class BankAccountEventReader extends ReadJournalStreamManagerActor[GroupedEventE
     startStream(offset)
     manageJournalMessage orElse manageJournalStream
   }
+
 }
 
 object BankAccountEventReader {
@@ -77,11 +84,25 @@ object BankAccountEventReader {
 
   case class OffsetReaded(offset: Offset)
 
-  private def readOffset(implicit executionContext: ExecutionContext): Future[TimeBasedUUID] = {
+  private def initOffsetIndex(implicit executionContext: ExecutionContext): Future[Response[CreateIndexResponse]] = {
+    val client: ElasticClient = ESHelper.elasticClient
+    val fResult = client
+      .execute(ESHelper.createOffsetIndexRequest)
+    fResult.onComplete(_ ⇒ client.close)
+    fResult
+  }
+
+  private def readOffset(implicit executionContext: ExecutionContext): Future[Offset] = {
     val client: ElasticClient = ESHelper.elasticClient
     val fResult = client
       .execute(ESHelper.getOffsetRequest(ESHelper.bankAccountOffsetId))
-      .map(read ⇒ read.result.to[TimeBasedUUID])
+      .map { read: Response[GetResponse] ⇒
+        if (read.isSuccess && read.result.exists) {
+          read.result.to[TimeBasedUUID]
+        } else {
+          NoOffset
+        }
+      }
     fResult.onComplete(_ ⇒ client.close)
     fResult
   }
