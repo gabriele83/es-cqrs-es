@@ -10,7 +10,6 @@ import com.sksamuel.elastic4s.circe._
 import com.sksamuel.elastic4s.http.ElasticDsl._
 import com.sksamuel.elastic4s.http.bulk.BulkResponse
 import com.sksamuel.elastic4s.http.get.GetResponse
-import com.sksamuel.elastic4s.http.index.CreateIndexResponse
 import com.sksamuel.elastic4s.http.{ ElasticClient, Response }
 import io.circe.generic.auto._
 import it.gabfav.es_cqrs_es.adapter.BankAccountAdapter
@@ -23,7 +22,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{ ExecutionContext, Future }
 import scala.util.{ Failure, Success }
 
-class BankAccountEventReader extends ReadJournalStreamManagerActor[GroupedEventEnvelope] {
+class BankAccountEventReader(implicit client: ElasticClient) extends ReadJournalStreamManagerActor[GroupedEventEnvelope] {
 
   private implicit val executionContext: ExecutionContext = context.dispatcher
 
@@ -46,14 +45,12 @@ class BankAccountEventReader extends ReadJournalStreamManagerActor[GroupedEventE
 
   override def receive: Receive = {
     case ReadOffset ⇒
-      (for {
-        _ ← initOffsetIndex
-        read ← readOffset
-      } yield read) onComplete {
+      readOffset onComplete {
         case Success(offset) ⇒
           self ! OffsetReaded(offset)
         case Failure(e) ⇒
           self ! OffsetReaded(NoOffset)
+          log.error(e, s"Offset: ${ESHelper.bankAccountOffsetId} not found")
       }
     case OffsetReaded(offset) ⇒
       context.become(withOffset(offset))
@@ -72,7 +69,7 @@ object BankAccountEventReader {
 
   val Name = "bank-account-event-reader"
 
-  def props: Props = Props(new BankAccountEventReader)
+  def props(implicit client: ElasticClient): Props = Props(new BankAccountEventReader)
 
   private val groupSize = 100
   private val streamWindow = 1 seconds
@@ -83,18 +80,8 @@ object BankAccountEventReader {
 
   case class OffsetReaded(offset: Offset)
 
-  private def initOffsetIndex(implicit executionContext: ExecutionContext): Future[Response[CreateIndexResponse]] = {
-    val client: ElasticClient = ESHelper.elasticClient
-    val fResult = client
-      .execute(ESHelper.createOffsetIndexRequest)
-    fResult.onComplete(_ ⇒ client.close)
-    fResult
-  }
-
-  private def readOffset(implicit executionContext: ExecutionContext): Future[Offset] = {
-    val client: ElasticClient = ESHelper.elasticClient
-    val fResult = client
-      .execute(ESHelper.getOffsetRequest(ESHelper.bankAccountOffsetId))
+  private def readOffset(implicit client: ElasticClient, executionContext: ExecutionContext): Future[Offset] = {
+    client.execute(ESHelper.getOffsetRequest(ESHelper.bankAccountOffsetId))
       .map { read: Response[GetResponse] ⇒
         if (read.isSuccess && read.result.exists) {
           read.result.to[TimeBasedUUID]
@@ -102,20 +89,15 @@ object BankAccountEventReader {
           NoOffset
         }
       }
-    fResult.onComplete(_ ⇒ client.close)
-    fResult
   }
 
   private def indexEventsAndOffset(
     events: Seq[BankAccountEvent],
     offset: TimeBasedUUID
-  )(implicit executionContext: ExecutionContext): Future[Response[BulkResponse]] = {
-    val client: ElasticClient = ESHelper.elasticClient
-    val fResult = client.execute(
+  )(implicit client: ElasticClient, executionContext: ExecutionContext): Future[Response[BulkResponse]] = {
+    client.execute(
       bulk(ESHelper.indexEventsRequest(events) :+ ESHelper.indexOffsetRequest(ESHelper.bankAccountOffsetId)(offset))
     )
-    fResult.onComplete(_ ⇒ client.close)
-    fResult
   }
 
 }

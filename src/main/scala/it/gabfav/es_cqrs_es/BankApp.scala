@@ -1,18 +1,19 @@
 package it.gabfav.es_cqrs_es
 
-import java.util.UUID
-
 import akka.actor.{ ActorSystem, PoisonPill }
 import akka.cluster.sharding.{ ClusterSharding, ClusterShardingSettings }
 import akka.cluster.singleton.{ ClusterSingletonManager, ClusterSingletonManagerSettings }
 import akka.event.{ Logging, LoggingAdapter }
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
+import com.sksamuel.elastic4s.http.ElasticClient
+import com.sksamuel.elastic4s.http.ElasticDsl._
 import com.typesafe.config.ConfigFactory
 import it.gabfav.es_cqrs_es.domain.BankAccount._
-import it.gabfav.es_cqrs_es.read.BankAccountEventReader
+import it.gabfav.es_cqrs_es.read.{ BankAccountEventReader, ESHelper }
 import it.gabfav.es_cqrs_es.write.BankAccountWriteActor
 
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
 object BankApp extends App with ActorSharding {
@@ -34,17 +35,21 @@ object BankApp extends App with ActorSharding {
     ActorSystem(Config.serviceName, config)
   }
 
-  implicit val dispatcher = system.dispatcher
+  implicit val dispatcher: ExecutionContext = system.dispatcher
 
   implicit val mat: ActorMaterializer = ActorMaterializer()
   implicit val timeout: Timeout = Timeout(20 seconds)
   implicit val logger: LoggingAdapter = Logging(system, getClass)
 
-  createClusterShardingActors()
-  createClusterSingletonActors()
-  // doTest()
+  private implicit val esClient: ElasticClient = ESHelper.elasticClient
 
-  // This will start the server until the return key is pressed
+  esClient.execute(ESHelper.createOffsetIndexRequest) onComplete { _ ⇒
+    createClusterShardingActors()
+    createClusterSingletonActors()
+    doTest()
+  }
+
+  sys.addShutdownHook(esClient.close())
 
   private def createClusterShardingActors(): Unit = {
     ClusterSharding(system).start(
@@ -54,12 +59,11 @@ object BankApp extends App with ActorSharding {
       extractEntityId = BankAccountWriteActor.idExtractor,
       extractShardId  = BankAccountWriteActor.shardResolver
     )
-
   }
 
   private def createClusterSingletonActors(): Unit = {
     system.actorOf(ClusterSingletonManager.props(
-      singletonProps     = BankAccountEventReader.props,
+      singletonProps     = BankAccountEventReader.props(esClient),
       terminationMessage = PoisonPill,
       settings           = ClusterSingletonManagerSettings(system)
     ), BankAccountEventReader.Name)
