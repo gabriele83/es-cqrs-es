@@ -1,19 +1,20 @@
 package it.gabfav.es_cqrs_es
 
-import akka.actor.{ ActorSystem, PoisonPill }
-import akka.cluster.sharding.{ ClusterSharding, ClusterShardingSettings }
-import akka.cluster.singleton.{ ClusterSingletonManager, ClusterSingletonManagerSettings }
-import akka.event.{ Logging, LoggingAdapter }
+import akka.actor.{ActorSystem, PoisonPill}
+import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings}
+import akka.cluster.singleton.{ClusterSingletonManager, ClusterSingletonManagerSettings}
+import akka.event.{Logging, LoggingAdapter}
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
-import com.sksamuel.elastic4s.http.ElasticClient
+import com.sksamuel.elastic4s.http.{ElasticClient, Response}
 import com.sksamuel.elastic4s.http.ElasticDsl._
+import com.sksamuel.elastic4s.http.index.CreateIndexResponse
 import com.typesafe.config.ConfigFactory
 import it.gabfav.es_cqrs_es.domain.BankAccount._
-import it.gabfav.es_cqrs_es.read.{ BankAccountEventReader, ESHelper }
+import it.gabfav.es_cqrs_es.read.{BankAccountEventReader, ESHelper}
 import it.gabfav.es_cqrs_es.write.BankAccountWriteActor
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 
 object BankApp extends App with ActorSharding {
@@ -40,16 +41,16 @@ object BankApp extends App with ActorSharding {
   implicit val mat: ActorMaterializer = ActorMaterializer()
   implicit val timeout: Timeout = Timeout(20 seconds)
   implicit val logger: LoggingAdapter = Logging(system, getClass)
-
   private implicit val esClient: ElasticClient = ESHelper.elasticClient
 
-  esClient.execute(ESHelper.createOffsetIndexRequest) onComplete { _ ⇒
-    createClusterShardingActors()
-    createClusterSingletonActors()
-    doTest()
-  }
+  createClusterShardingActors()
+  initElasticSearch onComplete (_ ⇒ createClusterSingletonActors())
+
+  doTest()
 
   sys.addShutdownHook(esClient.close())
+
+  private def initElasticSearch: Future[Response[CreateIndexResponse]] = esClient.execute(ESHelper.createOffsetIndexRequest)
 
   private def createClusterShardingActors(): Unit = {
     ClusterSharding(system).start(
