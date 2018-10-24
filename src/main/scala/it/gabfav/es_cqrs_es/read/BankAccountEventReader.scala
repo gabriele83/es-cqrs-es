@@ -54,7 +54,6 @@ class BankAccountEventReader extends ReadJournalStreamManagerActor[GroupedEventE
           self ! OffsetReaded(offset)
         case Failure(e) ⇒
           self ! OffsetReaded(NoOffset)
-          log.error(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>< " + e)
       }
     case OffsetReaded(offset) ⇒
       context.become(withOffset(offset))
